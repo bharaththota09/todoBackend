@@ -1,0 +1,11 @@
+GET http://localhost:3000/gettodos
+
+###
+GET http://localhost:3000/gettodos/4
+
+###
+DELETE  http://localhost:3000/deleteTodo/5
+
+###
+
+PUT http://localhost:3000/updateIsComplete/49
