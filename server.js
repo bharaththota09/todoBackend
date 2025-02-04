@@ -1,119 +1,96 @@
 const express = require('express')
 const app = express()
-const cors = require('cors');
-const sqlite3 = require('sqlite3')
-app.use(express.json());
-app.use(cors());
-const db = new sqlite3.Database('todo.db', (err) => {
-    if (err) {
-        console.log("Error in connectin to db");
-    }
-    else {
-        console.log("Connected Sucessfully");
-    }
-})
+const cors = require('cors')
+const Database = require('better-sqlite3')
+
+app.use(express.json())
+app.use(cors())
+
+// Connect to SQLite database using better-sqlite3
+const db = new Database('todo.db', { verbose: console.log("connected") })
+
 app.use(cors({
     origin: '',
     methods: 'GET,POST,PUT,DELETE',
     allowedHeaders: 'Content-Type,Authorization'
-}));
+}))
+
 app.get('/gettodos', (req, res) => {
-    let getTodosQuery = `select * from todos order by todoId desc`
-    db.all(getTodosQuery, (error, result) => {
-        if (error) {
-            res.status(401).json({ err: "Error in getting data" })
-        }
-        else {
-            res.status(200).json({ result })
-        }
-    })
+    try {
+        const getTodosQuery = 'SELECT * FROM todos ORDER BY todoId DESC'
+        const result = db.prepare(getTodosQuery).all()
+        res.status(200).json({ result })
+    } catch (error) {
+        res.status(401).json({ err: 'Error in getting data' })
+    }
 })
 
 app.get('/gettodos/:id', (req, res) => {
-    let todoId = req.params.id
-    let getParticularTodoQuery = `select * from todos where todoId=${todoId}`
-    db.all(getParticularTodoQuery, (error, result) => {
-        if (error) {
-            res.status(401).json({ err: "Error in getting data" })
-        }
-        else {
-            res.status(200).json({ result })
-        }
-    })
+    const todoId = req.params.id
+    try {
+        const getParticularTodoQuery = 'SELECT * FROM todos WHERE todoId = ?'
+        const result = db.prepare(getParticularTodoQuery).get(todoId)
+        res.status(200).json({ result })
+    } catch (error) {
+        res.status(401).json({ err: 'Error in getting data' })
+    }
 })
+
 app.delete('/deleteTodo/:todoId', (req, res) => {
     const { todoId } = req.params
-    let deleteTodoQuery = `delete from todos where todoId=${todoId}`
-    db.run(deleteTodoQuery, (error, result) => {
-        if (error) {
-            res.status(401).json({ err: "Error in getting data" })
-        }
-        else {
-            res.status(200).json({ msg: "Sucessfully Deleted Data" })
-        }
-    })
+    try {
+        const deleteTodoQuery = 'DELETE FROM todos WHERE todoId = ?'
+        db.prepare(deleteTodoQuery).run(todoId)
+        res.status(200).json({ msg: 'Successfully Deleted Data' })
+    } catch (error) {
+        res.status(401).json({ err: 'Error in deleting data' })
+    }
 })
 
 app.post('/addTodo', (req, res) => {
-    let { text, isCompleted } = req.body
-    let insertTodoQuery = `INSERT INTO todos (todoDescription, isCompleted) VALUES
-  ('${text}', ${isCompleted})`
-    db.run(insertTodoQuery, (error, result) => {
-        if (error) {
-            res.status(401).json({ err: "Error in Inserting todo" })
-        }
-        else {
-            res.status(200).json({ msg: "Inserted todo sucessfully" })
-        }
-    })
+    const { text, isCompleted } = req.body
+    try {
+        const insertTodoQuery = 'INSERT INTO todos (todoDescription, isCompleted) VALUES (?, ?)'
+        db.prepare(insertTodoQuery).run(text, isCompleted)
+        res.status(200).json({ msg: 'Inserted todo successfully' })
+    } catch (error) {
+        res.status(401).json({ err: 'Error in Inserting todo' })
+    }
 })
 
 app.put('/updateIsComplete/:todoId', (req, res) => {
-    let todoId = req.params.todoId
-    let isCompleted = null
-    let updatedQuery = null
-    let getTodoQuery = `select * from todos where todoId=${todoId}`
-    db.get(getTodoQuery, (error, result) => {
-        if (error) {
+    const todoId = req.params.todoId
+    try {
+        const getTodoQuery = 'SELECT * FROM todos WHERE todoId = ?'
+        const result = db.prepare(getTodoQuery).get(todoId)
 
-             res.status(401).json({ err: 'Error in fetching data' })
+        if (!result) {
+            return res.status(404).json({ err: 'Todo not found' })
         }
-        else {
-            isCompleted = result.isCompleted
-        }
-        if (isCompleted === 0) {
-            updatedQuery = `UPDATE todos SET isCompleted = 1 WHERE todoId = ${todoId}`
-        }
-        else {
-            updatedQuery = `UPDATE todos SET isCompleted = 0 WHERE todoId = ${todoId}`
-        }
-        db.run(updatedQuery, (error, result) => {
-            if (error) {
-                res.status(401).json({ err: "Error in updating " })
-            }
-            else {
-               res.status(200).json({ msg: 'Updated Sucessfully' })
-            }
-        })
 
-    })
-})
-app.put('/updateDescription/:todoId',(req,res)=>{
-    let todoId = req.params.todoId
-    let updateDescription =req.body.text
-    let updateDescriptionQuery =`update todos set todoDescription='${updateDescription}' where todoId=${todoId}`
-    db.run(updateDescriptionQuery,(error,result)=>{
-        if(error){
-            res.status(400).json({err:"Error in updating"})
-        }
-        else{
-          
-            res.status(200).json({msg:"Sucessfully Deleted"})
-        }
-    })
+        const updatedQuery = result.isCompleted === 0
+            ? 'UPDATE todos SET isCompleted = 1 WHERE todoId = ?'
+            : 'UPDATE todos SET isCompleted = 0 WHERE todoId = ?'
+
+        db.prepare(updatedQuery).run(todoId)
+        res.status(200).json({ msg: 'Updated Successfully' })
+    } catch (error) {
+        res.status(401).json({ err: 'Error in updating' })
+    }
 })
 
+app.put('/updateDescription/:todoId', (req, res) => {
+    const todoId = req.params.todoId
+    const updateDescription = req.body.text
+    try {
+        const updateDescriptionQuery = 'UPDATE todos SET todoDescription = ? WHERE todoId = ?'
+        db.prepare(updateDescriptionQuery).run(updateDescription, todoId)
+        res.status(200).json({ msg: 'Successfully Updated' })
+    } catch (error) {
+        res.status(400).json({ err: 'Error in updating' })
+    }
+})
 
 app.listen(3000, () => {
-    console.log("listeing in port 3000");
+    console.log("Listening on port 3000")
 })
